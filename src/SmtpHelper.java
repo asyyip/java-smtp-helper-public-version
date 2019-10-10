@@ -52,7 +52,7 @@ public class SmtpHelper {
 
 	public void send() throws SmtpMessagingException {
 		if (emailConfig.hasNoReceiver())
-			throw new NoReceiverException();
+			throw new NoReceiverException("No receiver address has been set in the email configuration.");
 		try {
 			// Ready
 			MimeMessage msg = new MimeMessage(session);
@@ -61,27 +61,18 @@ public class SmtpHelper {
 			} catch (javax.mail.internet.AddressException e) {
 				throw new AddressException(e, AddressException.AddressField.FROM);
 			}
-			try {
-				if (emailConfig.toAddresses != null)
-					msg.setRecipients(Message.RecipientType.TO,
-							stringArrayToInternetAddressArray(emailConfig.toAddresses));
-			} catch (javax.mail.internet.AddressException e) {
-				throw new AddressException(e, AddressException.AddressField.TO);
-			}
-			try {
-				if (emailConfig.ccAddresses != null)
-					msg.setRecipients(Message.RecipientType.CC,
-							stringArrayToInternetAddressArray(emailConfig.ccAddresses));
-			} catch (javax.mail.internet.AddressException e) {
-				throw new AddressException(e, AddressException.AddressField.CC);
-			}
-			try {
-				if (emailConfig.bccAddresses != null)
-					msg.setRecipients(Message.RecipientType.BCC,
-							stringArrayToInternetAddressArray(emailConfig.bccAddresses));
-			} catch (javax.mail.internet.AddressException e) {
-				throw new AddressException(e, AddressException.AddressField.BCC);
-			}
+			InternetAddress[] toAddresses = stringArrayToInternetAddressArray(emailConfig.toAddresses);
+			InternetAddress[] ccAddresses = stringArrayToInternetAddressArray(emailConfig.ccAddresses);
+			InternetAddress[] bccAddresses = stringArrayToInternetAddressArray(emailConfig.bccAddresses);
+			if ((toAddresses == null || toAddresses.length == 0) && (ccAddresses == null || ccAddresses.length == 0)
+					&& (bccAddresses == null || bccAddresses.length == 0))
+				throw new NoReceiverException("All receiver addresses are not proper email address.");
+			if (toAddresses != null && toAddresses.length != 0)
+				msg.setRecipients(Message.RecipientType.TO, toAddresses);
+			if (ccAddresses != null && ccAddresses.length != 0)
+				msg.setRecipients(Message.RecipientType.CC, ccAddresses);
+			if (bccAddresses != null && bccAddresses.length != 0)
+				msg.setRecipients(Message.RecipientType.BCC, bccAddresses);
 			if (emailConfig.useUtf8) {
 				msg.setSubject(emailConfig.getSubject(), "utf-8");
 				msg.setContent(emailConfig.getHtmlBody(), "text/html; charset=utf-8");
@@ -101,16 +92,21 @@ public class SmtpHelper {
 		}
 	}
 
-	private InternetAddress[] stringArrayToInternetAddressArray(String[] a)
-			throws javax.mail.internet.AddressException {
-		List<String> shrinked = new ArrayList<String>();
-		for (String s : a)
-			if (!StringUtils.isBlank(s))
-				shrinked.add(s);
-		InternetAddress[] addresses = new InternetAddress[shrinked.size()];
-		for (int i = 0; i < addresses.length; i++)
-			addresses[i] = new InternetAddress(shrinked.get(i));
-		return addresses;
+	private InternetAddress[] stringArrayToInternetAddressArray(String[] a) {
+		if (a == null)
+			return null;
+		List<InternetAddress> shrinked = new ArrayList<InternetAddress>();
+		for (String s : a) {
+			InternetAddress addr = null;
+			try {
+				addr = new InternetAddress(s);
+			} catch (javax.mail.internet.AddressException e) {
+				// Ignore string that is not a proper address
+			}
+			if (addr != null)
+				shrinked.add(addr);
+		}
+		return shrinked.toArray(new InternetAddress[shrinked.size()]);
 	}
 
 	public static class SmtpConfig {
